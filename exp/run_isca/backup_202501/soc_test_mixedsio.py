@@ -1,4 +1,3 @@
-# sp85 + ps 1 bar + T42
 # radius: 1.875 R_earth
 # surface gravity: 2.273 g_earth
 # orbital period: 0.73654625 days
@@ -13,11 +12,11 @@ eccentricity = 0.05
 surface_pressure = 1.0e5 # [Pa] reference_sea_level_press
 ## timesteps (from grid/sound_speed 600s)
 dt_rad = 5
-dt_atmos = 1
+dt_atmos = 5
 RESOLUTION = 'T42', 40
 ## atmosphere settings
-kappa = 2./9. # pure h2o
-mole_mass = 18e-3 # kg/mol
+kappa = 0.25641025641025633
+mole_mass = 37.6e-3 # kg/mol
 rdgas = 8.314/mole_mass
 
 import os
@@ -30,51 +29,55 @@ NCORES = 16
 base_dir = os.path.dirname(os.path.realpath(__file__))
 cb = SocratesCodeBase.from_directory(GFDL_BASE)
 
-exp = Experiment('55cnce_1bar_h2o', codebase=cb)
+exp = Experiment('soc_test_mixedsio', codebase=cb)
 exp.clear_rundir()
 
 # exp.inputfiles = [os.path.join(base_dir,'input/co2.nc')] # maybe the distribution of co2 is not important?
 
 #Tell model how to write diagnostics
 diag = DiagTable()
-diag.add_file('atmos_hourly', 60, 'minutes', time_units='minutes')
+#diag.add_file('atmos_hourly', 1, 'hours', time_units='hours')
+diag.add_file('atmos_step', 5, 'seconds', time_units='seconds')
 
 #Write out diagnostics need for vertical interpolation post-processing
-diag.add_field('dynamics', 'ps', time_avg=True)
+diag.add_field('dynamics', 'ps', time_avg=False)
 diag.add_field('dynamics', 'bk')
 diag.add_field('dynamics', 'pk')
 diag.add_field('dynamics', 'zsurf')
 
-#Tell model which diagnostics to write
-diag.add_field('atmosphere', 'precipitation', time_avg=True)
-diag.add_field('atmosphere', 'rh', time_avg=True)
-diag.add_field('mixed_layer', 't_surf', time_avg=True)
-diag.add_field('mixed_layer', 'flux_t', time_avg=True) #SH
-diag.add_field('mixed_layer', 'flux_lhe', time_avg=True) #LH
-diag.add_field('dynamics', 'sphum', time_avg=True)
-diag.add_field('dynamics', 'ucomp', time_avg=True)
-diag.add_field('dynamics', 'vcomp', time_avg=True)
-diag.add_field('dynamics', 'omega', time_avg=True)
-diag.add_field('dynamics', 'temp', time_avg=True)
+diag.add_field('mixed_layer', 't_surf', time_avg=False)
+diag.add_field('dynamics', 'ucomp', time_avg=False)
+diag.add_field('dynamics', 'vcomp', time_avg=False)
+diag.add_field('dynamics', 'omega', time_avg=False)
+diag.add_field('dynamics', 'temp', time_avg=False)
 
 #temperature tendency - units are K/s
-diag.add_field('socrates', 'soc_tdt_lw', time_avg=True) # net flux lw 3d (up - down)
-diag.add_field('socrates', 'soc_tdt_sw', time_avg=True)
-diag.add_field('socrates', 'soc_tdt_rad', time_avg=True) #sum of the sw and lw heating rates
+diag.add_field('socrates', 'soc_tdt_lw', time_avg=False) # net flux lw 3d (up - down)
+diag.add_field('socrates', 'soc_temp_lw', time_avg=False) # instaneous temp field
+diag.add_field('socrates', 'soc_tdt_sw', time_avg=False)
+diag.add_field('socrates', 'soc_tdt_rad', time_avg=False) #sum of the sw and lw heating rates
+diag.add_field('socrates', 'soc_t_half', time_avg=False)
+diag.add_field('socrates', 'soc_p_half', time_avg=False)
+diag.add_field('socrates', 'soc_p_full', time_avg=False)
+diag.add_field('socrates', 't_surf_for_soc', time_avg=False)
 
 #net (up) and down surface fluxes
-diag.add_field('socrates', 'soc_surf_flux_lw', time_avg=True)
-diag.add_field('socrates', 'soc_surf_flux_sw', time_avg=True)
-diag.add_field('socrates', 'soc_surf_flux_lw_down', time_avg=True)
-diag.add_field('socrates', 'soc_surf_flux_sw_down', time_avg=True)
-diag.add_field('socrates', 'soc_spectral_olr', time_avg=True)
+diag.add_field('socrates', 'soc_surf_flux_lw', time_avg=False)
+diag.add_field('socrates', 'soc_surf_flux_sw', time_avg=False)
+diag.add_field('socrates', 'soc_surf_flux_lw_down', time_avg=False)
+diag.add_field('socrates', 'soc_surf_flux_sw_down', time_avg=False)
+diag.add_field('socrates', 'soc_spectral_olr', time_avg=False)
 #net (up) TOA and downard fluxes
-diag.add_field('socrates', 'soc_olr', time_avg=True)
-diag.add_field('socrates', 'soc_toa_sw', time_avg=True) 
-diag.add_field('socrates', 'soc_toa_sw_down', time_avg=True)
-diag.add_field('socrates', 'soc_flux_lw', time_avg=True)
-diag.add_field('socrates', 'soc_flux_sw', time_avg=True)
-diag.add_field('socrates', 'soc_co2', time_avg=True)
+diag.add_field('socrates', 'soc_olr', time_avg=False)
+diag.add_field('socrates', 'soc_toa_sw', time_avg=False) 
+diag.add_field('socrates', 'soc_toa_sw_down', time_avg=False)
+diag.add_field('socrates', 'soc_flux_lw', time_avg=False)
+diag.add_field('socrates', 'soc_flux_sw', time_avg=False)
+diag.add_field('socrates', 'soc_flux_lw_up', time_avg=False)
+diag.add_field('socrates', 'soc_flux_sw_up', time_avg=False)
+diag.add_field('socrates', 'soc_co2', time_avg=False)
+diag.add_field('socrates', 'soc_coszen', time_avg=False)
+
 
 exp.diag_table = diag
 
@@ -86,16 +89,16 @@ exp.namelist = namelist = Namelist({
     'main_nml':{
      'days'   : 0,
      'hours'  : 0,
-     'minutes': 60,
-     'seconds': 0,
+     'minutes': 0,
+     'seconds': 5,
      'dt_atmos':dt_atmos,  # default: 600
      'current_date' : [1,1,1,0,0,0],
      'calendar' : 'thirty_day'
     },
     'socrates_rad_nml': {
         'stellar_constant':S0*1370,
-        'lw_spectral_filename':os.path.join(GFDL_BASE,sp_test_root,star_gas,'sp_lw_b85_55CancriA_H2O_T62xP22_001_nk20'),
-        'sw_spectral_filename':os.path.join(GFDL_BASE,sp_test_root,star_gas,'sp_sw_b85_55CancriA_H2O_T62xP22_001_nk20'),
+        'lw_spectral_filename':os.path.join(GFDL_BASE,sp_test_root,star_gas,'sp_lw_b85_cosi_55CancriA'),
+        'sw_spectral_filename':os.path.join(GFDL_BASE,sp_test_root,star_gas,'sp_sw_b85_cosi_55CancriA'),
         'dt_rad':dt_rad,
         'store_intermediate_rad':True,
         'chunk_size': 16,
@@ -106,15 +109,16 @@ exp.namelist = namelist = Namelist({
         'inc_h2o': False,
         'inc_co2': True,
         'inc_co': True,
-        'inc_cfc113':True,
+        'inc_hcfc22': True,
         'account_for_effect_of_water': False, # still water in the atm, not just disable the radiation; ask stephen: h2o; check the rain-> small value; email metoffice again
         'account_for_effect_of_ozone': False,
-        'co_mix_ratio': 0.0,  #  mixed gas concentrations (kg / kg)
-        'co2_ppmv': 0.0,
-        
+        'co_mix_ratio': 0.29787234042553196,
+        'co2_ppmv': 0.4e6,
+        #'input_co2_mmr': True, # mass mixing ratio but ppmm
+        'n2_mix_ratio': 0.0,
         'n2o_mix_ratio':0.0,'ch4_mix_ratio':0.0,'o2_mix_ratio':0.0, 
         'so2_mix_ratio':0.0,'cfc11_mix_ratio':0.0, 'cfc12_mix_ratio':0.0, 
-        'cfc113_mix_ratio':1.0,'hcfc22_mix_ratio':0.0,  
+        'cfc113_mix_ratio':0.0,'hcfc22_mix_ratio':0.23404255319148937,  
     },
     
     'spectral_init_cond_nml': {
@@ -133,7 +137,8 @@ exp.namelist = namelist = Namelist({
         'orbital_period': orbital_period*24.*3600., # [s]
         'solar_const': S0*1370., # [W/m^2]
         'rdgas': rdgas, # gas constant for CO2 [J/kg/K]
-        'kappa': kappa # R/c_p depends on the molecule
+        'kappa': kappa, # R/c_p depends on the molecule
+        'es0': 1.0, # for saturation vapor pressure
     },
     
     'idealized_moist_phys_nml': {
@@ -226,7 +231,7 @@ exp.namelist = namelist = Namelist({
         'water_correction_limit': 200.e2,
         'reference_sea_level_press':surface_pressure,
         'num_levels':40,      #How many model pressure levels to use
-        'valid_range_t':[1.,4500.],
+        'valid_range_t':[1.,3500.],
         'initial_sphum':[0.], # set to zero
         'vert_coord_option':'uneven_sigma',
         'surf_res':0.2, # Parameter that sets the vertical distribution of sigma levels
@@ -247,7 +252,7 @@ exp.namelist = namelist = Namelist({
 if __name__=="__main__":
     cb.compile()
     exp.set_resolution(*RESOLUTION)
-    exp.run(1, num_cores=NCORES, overwrite_data=False)
+    exp.run(41, num_cores=NCORES, overwrite_data=False)
     overwrite = False
-    for i in range(2, 601):
+    for i in range(42,61):
         exp.run(i, num_cores=NCORES, overwrite_data=overwrite)

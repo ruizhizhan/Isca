@@ -1,24 +1,29 @@
-# sp85 + ps 20 bar + T42
+## Planet configuration, 55 cnce
 # radius: 1.875 R_earth
 # surface gravity: 2.273 g_earth
 # orbital period: 0.73654625 days
 # solar constant: 2441.3 S_earth
-### Planet configuration
 radius = 1.875
 surface_g = 2.273
 orbital_period = 0.73654625
 S0 = 2441.3
 eccentricity = 0.05
-## surface pressure
-surface_pressure = 10e5 # [Pa] reference_sea_level_press
-## timesteps (from grid/sound_speed 600s)
-dt_rad = 40
-dt_atmos = 10
+## surface pressure and TOA pressure
+surface_pressure = 1.0e5 # [Pa] reference_sea_level_press
+scale_heights = 4.0 # 4.0 -> 0.08ps; 6.0 -> 0.01 ps
+# rayleigh drag; test to stablize the simulation
+trayfric = -8640/86400 # neg. value: time in *days*; larger value -> weaker damping
+sponge_pbottom = surface_pressure/1e3 # [Pa] Set the lower pressure boundary for the model sponge layer in Pa.
+## time and space resolution (from grid/sound_speed 600s)
+dt_rad = 20
+dt_atmos = 5
 RESOLUTION = 'T42', 40
 ## atmosphere settings
-kappa = 2./7. # pure co
-mole_mass = 28e-3 # kg/mol
+kappa = 0.285706122682209
+mole_mass = 28.0016e-3 # kg/mol
 rdgas = 8.314/mole_mass
+# spectral files
+spec_file = f"b85_co2-n2_55CancriA" # co2-co mixed gas
 
 import os
 import numpy as np
@@ -30,27 +35,21 @@ NCORES = 16
 base_dir = os.path.dirname(os.path.realpath(__file__))
 cb = SocratesCodeBase.from_directory(GFDL_BASE)
 
-exp = Experiment('55cnce_10bar_co_110', codebase=cb)
+exp = Experiment('55cnce_1e5pa_1e-4co2_n2', codebase=cb)
 exp.clear_rundir()
-
-# exp.inputfiles = [os.path.join(base_dir,'input/co2.nc')] # maybe the distribution of co2 is not important?
 
 #Tell model how to write diagnostics
 diag = DiagTable()
-diag.add_file('atmos_hourly', 60, 'minutes', time_units='minutes')
+diag.add_file('atmos_hourly', 1, 'hours', time_units='hours')
+#diag.add_file('atmos_step', 5, 'seconds', time_units='seconds')
 
 #Write out diagnostics need for vertical interpolation post-processing
 diag.add_field('dynamics', 'ps', time_avg=True)
 diag.add_field('dynamics', 'bk')
 diag.add_field('dynamics', 'pk')
-diag.add_field('dynamics', 'zsurf')
 
 #Tell model which diagnostics to write
-diag.add_field('atmosphere', 'precipitation', time_avg=True)
-diag.add_field('atmosphere', 'rh', time_avg=True)
 diag.add_field('mixed_layer', 't_surf', time_avg=True)
-diag.add_field('mixed_layer', 'flux_t', time_avg=True) #SH
-diag.add_field('mixed_layer', 'flux_lhe', time_avg=True) #LH
 diag.add_field('dynamics', 'sphum', time_avg=True)
 diag.add_field('dynamics', 'ucomp', time_avg=True)
 diag.add_field('dynamics', 'vcomp', time_avg=True)
@@ -59,8 +58,13 @@ diag.add_field('dynamics', 'temp', time_avg=True)
 
 #temperature tendency - units are K/s
 diag.add_field('socrates', 'soc_tdt_lw', time_avg=True) # net flux lw 3d (up - down)
+diag.add_field('socrates', 'soc_temp_lw', time_avg=True) # instaneous temp field
 diag.add_field('socrates', 'soc_tdt_sw', time_avg=True)
 diag.add_field('socrates', 'soc_tdt_rad', time_avg=True) #sum of the sw and lw heating rates
+diag.add_field('socrates', 'soc_t_half', time_avg=True)
+diag.add_field('socrates', 'soc_p_half', time_avg=True)
+diag.add_field('socrates', 'soc_p_full', time_avg=True)
+diag.add_field('socrates', 't_surf_for_soc', time_avg=True)
 
 #net (up) and down surface fluxes
 diag.add_field('socrates', 'soc_surf_flux_lw', time_avg=True)
@@ -74,19 +78,22 @@ diag.add_field('socrates', 'soc_toa_sw', time_avg=True)
 diag.add_field('socrates', 'soc_toa_sw_down', time_avg=True)
 diag.add_field('socrates', 'soc_flux_lw', time_avg=True)
 diag.add_field('socrates', 'soc_flux_sw', time_avg=True)
-diag.add_field('socrates', 'soc_co2', time_avg=True)
+diag.add_field('socrates', 'soc_flux_lw_up', time_avg=True)
+diag.add_field('socrates', 'soc_flux_sw_up', time_avg=True)
+diag.add_field('socrates', 'soc_coszen', time_avg=True)
+
 
 exp.diag_table = diag
 
 #
 sp_test_root = 'src/atmos_param/socrates/src/trunk/data/spectra/sp_test/'
-star_gas = '55CancriA/CO_CO2'
+star_gas = '55CancriA'
 #Define values for the 'core' namelist
 exp.namelist = namelist = Namelist({
     'main_nml':{
      'days'   : 0,
-     'hours'  : 0,
-     'minutes': 60,
+     'hours'  : 1,
+     'minutes': 0,
      'seconds': 0,
      'dt_atmos':dt_atmos,  # default: 600
      'current_date' : [1,1,1,0,0,0],
@@ -94,8 +101,8 @@ exp.namelist = namelist = Namelist({
     },
     'socrates_rad_nml': {
         'stellar_constant':S0*1370,
-        'lw_spectral_filename':os.path.join(GFDL_BASE,sp_test_root,star_gas,'sp_lw_b85_cohn_55CancriA'),
-        'sw_spectral_filename':os.path.join(GFDL_BASE,sp_test_root,star_gas,'sp_sw_b85_cohn_55CancriA'),
+        'lw_spectral_filename':os.path.join(GFDL_BASE,sp_test_root,star_gas,f'sp_lw_{spec_file}'),
+        'sw_spectral_filename':os.path.join(GFDL_BASE,sp_test_root,star_gas,f'sp_sw_{spec_file}'),
         'dt_rad':dt_rad,
         'store_intermediate_rad':True,
         'chunk_size': 16,
@@ -105,12 +112,12 @@ exp.namelist = namelist = Namelist({
         'inc_o3': False, 
         'inc_h2o': False,
         'inc_co2': True,
-        'inc_co': True,
+        'inc_co': False,
         'account_for_effect_of_water': False, # still water in the atm, not just disable the radiation; ask stephen: h2o; check the rain-> small value; email metoffice again
         'account_for_effect_of_ozone': False,
-        'co_mix_ratio': 1.0,  #  mixed gas concentrations (kg / kg)
-        'co2_ppmv': 0.0, # ppmv:0~1e6
-        
+        'n2_mix_ratio': 0.9998428661219358,  #  mixed gas concentrations (kg / kg)
+        'co2_ppmv': 1e2, 
+        #'input_co2_mmr': True, # mass mixing ratio but ppmm
         'n2o_mix_ratio':0.0,'ch4_mix_ratio':0.0,'o2_mix_ratio':0.0, 
         'so2_mix_ratio':0.0,'cfc11_mix_ratio':0.0, 'cfc12_mix_ratio':0.0, 
         'cfc113_mix_ratio':0.0,'hcfc22_mix_ratio':0.0,  
@@ -132,7 +139,8 @@ exp.namelist = namelist = Namelist({
         'orbital_period': orbital_period*24.*3600., # [s]
         'solar_const': S0*1370., # [W/m^2]
         'rdgas': rdgas, # gas constant for CO2 [J/kg/K]
-        'kappa': kappa # R/c_p depends on the molecule
+        'kappa': kappa, # R/c_p depends on the molecule
+        'es0': 1.0, # for saturation vapor pressure
     },
     
     'idealized_moist_phys_nml': {
@@ -141,9 +149,9 @@ exp.namelist = namelist = Namelist({
         'mixed_layer_bc':True,
         'do_virtual' :False,
         'do_simple': True,
-        'roughness_mom':3.21e-05,
-        'roughness_heat':3.21e-05,
-        'roughness_moist':3.21e-05,            
+        'roughness_mom':1e-3, # rocky surface 1e-3 (?); open ocean 2e-4; plant 1e-2
+        'roughness_heat':1e-3,
+        'roughness_moist':1e-3,            
         'two_stream_gray': False,     #Use the grey radiation scheme
         'do_socrates_radiation': True,
         'convection_scheme': 'DRY', #Use dry convection           
@@ -175,7 +183,7 @@ exp.namelist = namelist = Namelist({
 
     #Use a large mixed-layer depth, and the Albedo of the CTRL case in Jucker & Gerber, 2017
     'mixed_layer_nml': {
-        'tconst' : 310.,                       # can it be higher?
+        'tconst' : 2500.,                      
         'prescribe_initial_dist':True,
         'evaporation': False,                  # Disable surface evaporation
         'depth': 0.5,                          # Depth of mixed layer used
@@ -200,8 +208,8 @@ exp.namelist = namelist = Namelist({
     
     'damping_driver_nml': {
         'do_rayleigh': True,
-        'trayfric': -0.5,              # neg. value: time in *days*
-        'sponge_pbottom':  150., #Setting the lower pressure boundary for the model sponge layer in Pa.
+        'trayfric': trayfric,
+        'sponge_pbottom':  sponge_pbottom,
         'do_conserve_energy': True,      
     },
 
@@ -221,15 +229,15 @@ exp.namelist = namelist = Namelist({
 
     'spectral_dynamics_nml': {
         'damping_order': 4,
-        'damping_coeff': 2.3148148e-04,      
+        'damping_coeff': 2.3148148e-02,      
         'water_correction_limit': 200.e2,
         'reference_sea_level_press':surface_pressure,
         'num_levels':40,      #How many model pressure levels to use
-        'valid_range_t':[1.,3500.],
+        'valid_range_t':[1.,4500.],
         'initial_sphum':[0.], # set to zero
         'vert_coord_option':'uneven_sigma',
         'surf_res':0.2, # Parameter that sets the vertical distribution of sigma levels
-        'scale_heights' : 4.0, # test scale height
+        'scale_heights' : scale_heights, 
         'exponent':2.0,
         'robert_coeff':0.03,
         'do_water_correction': False # disable water correction
@@ -248,5 +256,5 @@ if __name__=="__main__":
     exp.set_resolution(*RESOLUTION)
     exp.run(1, num_cores=NCORES, overwrite_data=False)
     overwrite = False
-    for i in range(2, 21):
+    for i in range(2,1201):
         exp.run(i, num_cores=NCORES, overwrite_data=overwrite)
